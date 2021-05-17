@@ -3,6 +3,7 @@ members = [
     "virtio-test",
     "xtask"
 ]
+default-members = ["xtask"]
 
 [profile.dev]
 panic = "abort"

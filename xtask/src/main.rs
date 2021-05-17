@@ -31,9 +31,11 @@ fn main() {
         xtask_build();
         xtask_binary();
         xtask_qemu();
-    }else if let Some(_matches) = matches.subcommand_matches("asm") {
+    } else if let Some(_matches) = matches.subcommand_matches("asm") {
         xtask_build();
         xtask_asm();
+    } else {
+        println!("Use `cargo qemu` to run, `cargo xtask --help` for help")
     }
 }
 
