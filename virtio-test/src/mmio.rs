@@ -6,12 +6,12 @@ use volatile_register::{RO, WO, RW};
 #[repr(C)]
 pub struct VirtIoHeader {
     /// Magic value
-    pub magic: RO<u32>,
+    magic: RO<u32>,
 
     /// Device version number
     ///
     /// Legacy device returns value 0x1.
-    pub version: RO<u32>,
+    version: RO<u32>,
 
     /// Virtio Subsystem Device ID
     device_id: RO<u32>,
@@ -141,6 +141,13 @@ pub struct VirtIoHeader {
     __r9: [u32; 21],
 
     config_generation: RO<u32>,
+}
+
+impl VirtIoHeader {
+    /// Verify a valid header.
+    pub fn verify(&self) -> bool {
+        self.magic.read() == 0x7472_6976 && self.version.read() == 1 && self.device_id.read() != 0
+    }
 }
 
 bitflags::bitflags! {

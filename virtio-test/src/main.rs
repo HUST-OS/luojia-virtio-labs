@@ -43,7 +43,7 @@ pub extern "C" fn rust_main(hartid: usize, dtb_pa: usize) -> ! {
     let header = unsafe {
         &mut *(0x10001000 as *mut mmio::VirtIoHeader)
     };
-    println!("Magic = {:#x}, Version = {}", header.magic.read(), header.version.read());
+    println!("Verify = {}", header.verify());
 
     println!("<< Kernel: test SUCCESS, shutdown");
     sbi::shutdown()
