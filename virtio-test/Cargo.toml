@@ -12,3 +12,5 @@ r0 = "1"
 lazy_static = { version = "1", features = ["spin_no_std"] }
 device_tree = { git = "https://github.com/rcore-os/device_tree-rs/" }
 linked_list_allocator = "0.9"
+volatile-register = "0.2"
+bitflags = "1.2"
