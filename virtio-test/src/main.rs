@@ -1,4 +1,5 @@
 #![feature(naked_functions, asm)]
+#![feature(alloc_error_handler)]
 #![no_std]
 #![no_main]
 
@@ -173,52 +174,59 @@ mod sbi {
     }
 }
 
-use riscv::register::{sepc, stvec::{self, TrapMode}, scause::{self, Trap, Exception}};
+use linked_list_allocator::LockedHeap;
+
+use core::mem::MaybeUninit;
+const HEAP_SIZE: usize = 1024;
+static mut HEAP: MaybeUninit<[u8; HEAP_SIZE]> = MaybeUninit::uninit();
+
+#[global_allocator]
+static ALLOCATOR: LockedHeap = LockedHeap::empty();
+
+unsafe fn init_heap() {
+    let heap_start = &mut HEAP as *mut _ as usize;
+    ALLOCATOR.lock().init(heap_start, HEAP_SIZE);
+}
+
+#[allow(unused)]
+#[cfg_attr(not(test), alloc_error_handler)]
+fn oom(_layout: core::alloc::Layout) -> ! {
+    loop {}
+}
+
+use riscv::register::stvec::{self, TrapMode};
 
 pub extern "C" fn rust_main(hartid: usize, dtb_pa: usize) -> ! {
-    println!("<< Test-kernel: Hart id = {}, DTB physical address = {:#x}", hartid, dtb_pa);
-    test_base_extension();
-    test_sbi_ins_emulation();
+    extern "C" { fn sbss(); fn ebss();/* fn ekernel(); */}
+    unsafe { r0::zero_bss(&mut sbss as *mut _ as *mut u64, &mut ebss as *mut _ as *mut u64) };
+    println!("<< Kernel: Hart id = {}, DTB physical address = {:#x}", hartid, dtb_pa);
+    unsafe { init_heap() };
     unsafe { stvec::write(start_trap as usize, TrapMode::Direct) };
-    println!(">> Test-kernel: Trigger illegal exception");
-    unsafe { asm!("csrw mcycle, x0") }; // mcycle cannot be written, this is always a 4-byte illegal instruction
-    println!("<< Test-kernel: SBI test SUCCESS, shutdown");
+    
+    unsafe { dump_dtb(dtb_pa) };
+
+    println!("<< Kernel: test SUCCESS, shutdown");
     sbi::shutdown()
 }
 
-fn test_base_extension() {
-    println!(">> Test-kernel: Testing base extension");
-    let base_version = sbi::probe_extension(sbi::EXTENSION_BASE);
-    if base_version == 0 {
-        println!("!! Test-kernel: no base extension probed; SBI call returned value '0'");
-        println!("!! Test-kernel: This SBI implementation may only have legacy extension implemented");
-        println!("!! Test-kernel: SBI test FAILED due to no base extension found");
-        sbi::shutdown()
+unsafe fn dump_dtb(dtb_pa: usize) {
+    const DEVICE_TREE_MAGIC: u32 = 0xD00DFEED;
+    #[repr(C)]
+    struct DtbHeader { magic: u32, size: u32 }
+    let header = &*(dtb_pa as *const DtbHeader);
+    let magic = u32::from_be(header.magic);
+    if magic == DEVICE_TREE_MAGIC {
+        let size = u32::from_be(header.size);
+        // 拷贝数据，加载并遍历
+        let data = core::slice::from_raw_parts(dtb_pa as *const u8, size as usize);
+        if let Ok(dt) = device_tree::DeviceTree::load(data) {
+            println!("{:#?}", dt);
+        }
     }
-    println!("<< Test-kernel: Base extension version: {:x}", base_version);
-    println!("<< Test-kernel: SBI specification version: {:x}", sbi::get_spec_version());
-    println!("<< Test-kernel: SBI implementation Id: {:x}", sbi::get_sbi_impl_id());
-    println!("<< Test-kernel: SBI implementation version: {:x}", sbi::get_sbi_impl_version());
-    println!("<< Test-kernel: Device mvendorid: {:x}", sbi::get_mvendorid());
-    println!("<< Test-kernel: Device marchid: {:x}", sbi::get_marchid());
-    println!("<< Test-kernel: Device mimpid: {:x}", sbi::get_mimpid());
-}
-
-fn test_sbi_ins_emulation() {
-    println!(">> Test-kernel: Testing SBI instruction emulation");
-    let time = riscv::register::time::read64();
-    println!("<< Test-kernel: Current time: {:x}", time);
 }
 
 pub extern "C" fn rust_trap_exception() {
-    let cause = scause::read().cause();
-    println!("<< Test-kernel: Value of scause: {:?}", cause);
-    if cause != Trap::Exception(Exception::IllegalInstruction) {
-        println!("!! Test-kernel: Wrong cause associated to illegal instruction");
-        sbi::shutdown()
-    }
-    println!("<< Test-kernel: Illegal exception delegate success");
-    sepc::write(sepc::read().wrapping_add(4));
+
 }
 
 use core::panic::PanicInfo;
@@ -226,8 +234,8 @@ use core::panic::PanicInfo;
 #[cfg_attr(not(test), panic_handler)]
 #[allow(unused)]
 fn panic(info: &PanicInfo) -> ! {
-    println!("!! Test-kernel: {}", info);
-    println!("!! Test-kernel: SBI test FAILED due to panic");
+    println!("!! Kernel: {}", info);
+    println!("!! Kernel: Test failed due to panic");
     sbi::shutdown()
 }
 
@@ -255,20 +263,6 @@ unsafe extern "C" fn entry() -> ! {
     boot_stack = sym BOOT_STACK, 
     rust_main = sym rust_main,
     options(noreturn))
-}
-
-
-#[cfg(target_pointer_width = "128")]
-macro_rules! define_store_load {
-    () => {
-        ".altmacro
-        .macro STORE reg, offset
-            sq  \\reg, \\offset* {REGBYTES} (sp)
-        .endm
-        .macro LOAD reg, offset
-            lq  \\reg, \\offset* {REGBYTES} (sp)
-        .endm"
-    };
 }
 
 #[cfg(target_pointer_width = "64")]

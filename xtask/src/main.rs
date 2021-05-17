@@ -20,6 +20,9 @@ fn main() {
         (@subcommand asm =>
             (about: "View asm code for virtio test project")
         )
+        (@subcommand size =>
+            (about: "View size for virtio test project")
+        )
         (@subcommand qemu =>
             (about: "Run QEMU")
         )
@@ -34,6 +37,9 @@ fn main() {
     } else if let Some(_matches) = matches.subcommand_matches("asm") {
         xtask_build();
         xtask_asm();
+    } else if let Some(_matches) = matches.subcommand_matches("size") {
+        xtask_build();
+        xtask_size();
     } else {
         println!("Use `cargo qemu` to run, `cargo xtask --help` for help")
     }
@@ -60,6 +66,17 @@ fn xtask_asm() {
     Command::new(objdump)
         .current_dir(dist_dir())
         .arg("-d")
+        .arg("virtio-test")
+        .status().unwrap();
+}
+
+fn xtask_size() {
+    // @{{size}} -A -x {{test-kernel-elf}} 
+    let size = "rust-size";
+    Command::new(size)
+        .current_dir(dist_dir())
+        .arg("-A")
+        .arg("-x")
         .arg("virtio-test")
         .status().unwrap();
 }
@@ -104,7 +121,8 @@ fn xtask_qemu() {
         .args(&["-bios", "none"])
         .arg("-nographic")
         .args(&["-device", "loader,file=../../../bootloader/rustsbi-qemu.bin,addr=0x80000000"])
-        .args(&["-device", &format!("loader,file={},addr={:#x}", "virtio-test.bin", 0x80200000usize)])
+        .args(&["-device", "loader,file=virtio-test.bin,addr=0x80200000"])
+        .args(&["-drive", "file=../../../drives/1.img,if=virtio,format=raw"])
         .status().unwrap();
     
     if !status.success() {
