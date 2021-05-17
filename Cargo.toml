@@ -1,0 +1,11 @@
+[workspace]
+members = [
+    "virtio-test",
+    "xtask"
+]
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
