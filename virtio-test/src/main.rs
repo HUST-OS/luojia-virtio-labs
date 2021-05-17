@@ -177,15 +177,16 @@ mod sbi {
 use linked_list_allocator::LockedHeap;
 
 use core::mem::MaybeUninit;
-const HEAP_SIZE: usize = 1024;
-static mut HEAP: MaybeUninit<[u8; HEAP_SIZE]> = MaybeUninit::uninit();
+const KERNEL_HEAP_SIZE: usize = 64 * 1024;
+static mut HEAP_SPACE: MaybeUninit<[u8; KERNEL_HEAP_SIZE]> = MaybeUninit::uninit();
 
 #[global_allocator]
 static ALLOCATOR: LockedHeap = LockedHeap::empty();
 
 unsafe fn init_heap() {
-    let heap_start = &mut HEAP as *mut _ as usize;
-    ALLOCATOR.lock().init(heap_start, HEAP_SIZE);
+    ALLOCATOR.lock().init(
+        HEAP_SPACE.as_ptr() as usize, KERNEL_HEAP_SIZE
+    )
 }
 
 #[allow(unused)]
@@ -220,7 +221,7 @@ unsafe fn dump_dtb(dtb_pa: usize) {
         // 拷贝数据，加载并遍历
         let data = core::slice::from_raw_parts(dtb_pa as *const u8, size as usize);
         if let Ok(dt) = device_tree::DeviceTree::load(data) {
-            println!("{:#?}", dt);
+            println!("{:?}", dt);
         }
     }
 }
