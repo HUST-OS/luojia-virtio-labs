@@ -122,7 +122,8 @@ fn xtask_qemu() {
         .arg("-nographic")
         .args(&["-device", "loader,file=../../../bootloader/rustsbi-qemu.bin,addr=0x80000000"])
         .args(&["-device", "loader,file=virtio-test.bin,addr=0x80200000"])
-        .args(&["-drive", "file=../../../drives/1.img,if=none,format=raw,id=x0"])
+        .args(&["-drive", "file=../../../drives/raw1.img,if=none,format=raw,id=x0"])
+        .args(&["-device","virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0"])
         .status().unwrap();
     
     if !status.success() {
